@@ -1,0 +1,222 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion-Based Music Recommendation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #videoContainer {
+      margin: 20px auto;
+      width: 640px;
+      height: 480px;
+      position: relative;
+    }
+
+    video {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: black;
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #1db954;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #14833b;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    label {
+      padding: 10px 20px;
+      background-color: #1db954;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    label:hover {
+      background-color: #14833b;
+    }
+
+    #gestureMessage {
+      font-size: 20px;
+      font-weight: bold;
+      margin-top: 15px;
+      color: #1db954;
+    }
+
+    #cameraOffMessage {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+      border-radius: 10px;
+      z-index: 10;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Emotion-Based Music Recommendation</h1>
+  <h2> Welcome, {{ user.username }}</h2>
+
+  <div id="videoContainer">
+    <video id="webcam" autoplay muted></video>
+    <canvas id="emotionCanvas"></canvas>
+    <div id="cameraOffMessage">Camera is off</div>
+  </div>
+
+  <div class="controls">
+    <button id="toggleVideo">Video On/Off</button>
+    <label for="imageUpload">Upload Image</label>
+    <input type="file" id="imageUpload" accept="image/*" />
+    <button id="recommendedPlaylist">Recommended Playlist</button>
+  </div>
+
+  <p id="gestureMessage"></p>
+
+  <script src="{% static 'main.js' %}"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const webcam = document.getElementById("webcam");
+      const gestureMessage = document.getElementById("gestureMessage");
+      const toggleVideoButton = document.getElementById("toggleVideo");
+      const emotionCanvas = document.getElementById("emotionCanvas");
+      const canvasCtx = emotionCanvas.getContext("2d");
+
+      let isVideoOn = false;
+      let mediaStream = null;
+
+      // Initialize MediaPipe Hands
+      const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+      hands.setOptions({
+        maxNumHands: 2,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      // Detect gestures (e.g., "volume up", "volume down", "brightness up", "brightness down")
+      let currentGesture = '';
+      let currentHandType = '';
+
+      // Function to start/stop the webcam
+      function toggleVideo() {
+        if (isVideoOn) {
+          if (mediaStream) {
+            const tracks = mediaStream.getTracks();
+            tracks.forEach(track => track.stop());
+          }
+          webcam.srcObject = null;
+          gestureMessage.innerText = "Camera is off";
+        } else {
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+              mediaStream = stream;
+              webcam.srcObject = stream;
+              gestureMessage.innerText = "Camera is on";
+              startGestureRecognition();
+            })
+            .catch(err => {
+              console.log("Error starting webcam:", err);
+              gestureMessage.innerText = "Error accessing webcam";
+            });
+        }
+        isVideoOn = !isVideoOn;
+      }
+
+      // Start gesture recognition when the video is on
+      function startGestureRecognition() {
+        const videoElement = webcam;
+        const canvas = emotionCanvas;
+        const videoWidth = videoElement.videoWidth;
+        const videoHeight = videoElement.videoHeight;
+
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
+
+        function detectGestures() {
+          if (!videoElement.paused && !videoElement.ended) {
+            hands.send({ image: videoElement });
+          }
+        }
+
+        hands.onResults(results => {
+          canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (results.multiHandLandmarks) {
+            results.multiHandLandmarks.forEach(handLandmarks => {
+              const wristY = handLandmarks[0].y;
+              currentHandType = wristY > 0.5 ? "up" : "down";
+              currentGesture = currentHandType === "up" ? "Volume Up" : "Volume Down";
+
+              gestureMessage.innerText = currentGesture;
+
+              hands.drawLandmarks(canvasCtx, handLandmarks, Hands.BOX_CONNECTIONS);
+            });
+          } else {
+            gestureMessage.innerText = "No gestures detected";
+          }
+        });
+
+        setInterval(detectGestures, 100);
+      }
+
+      // Toggle video when the button is clicked
+      toggleVideoButton.addEventListener("click", toggleVideo);
+    });
+  </script>
+</body>
+
+</html>
