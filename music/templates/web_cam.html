@@ -23,14 +23,11 @@
     }
 
     video {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: black;
       width: 100%;
       height: 100%;
       border-radius: 10px;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      background-color: black;
     }
 
     canvas {
@@ -49,24 +46,7 @@
       gap: 15px;
     }
 
-    button {
-      padding: 10px 20px;
-      background-color: #1db954;
-      border: none;
-      border-radius: 5px;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #14833b;
-    }
-
-    input[type="file"] {
-      display: none;
-    }
-
+    button,
     label {
       padding: 10px 20px;
       background-color: #1db954;
@@ -77,8 +57,13 @@
       cursor: pointer;
     }
 
+    button:hover,
     label:hover {
       background-color: #14833b;
+    }
+
+    input[type="file"] {
+      display: none;
     }
 
     #gestureMessage {
@@ -109,7 +94,7 @@
 
 <body>
   <h1>Emotion-Based Music Recommendation</h1>
-  <h2> Welcome, {{ user.username }}</h2>
+  <h2>Welcome, {{ user.username }}</h2>
 
   <div id="videoContainer">
     <video id="webcam" autoplay muted></video>
@@ -126,10 +111,13 @@
 
   <p id="gestureMessage"></p>
 
+  <!-- Load MediaPipe before main.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
   <script src="{% static 'main.js' %}"></script>
 
   <script>
-    document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("DOMContentLoaded", () => {
       const webcam = document.getElementById("webcam");
       const gestureMessage = document.getElementById("gestureMessage");
       const toggleVideoButton = document.getElementById("toggleVideo");
@@ -139,7 +127,6 @@
       let isVideoOn = false;
       let mediaStream = null;
 
-      // Initialize MediaPipe Hands
       const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
       hands.setOptions({
         maxNumHands: 2,
@@ -147,73 +134,60 @@
         minTrackingConfidence: 0.5
       });
 
-      // Detect gestures (e.g., "volume up", "volume down", "brightness up", "brightness down")
-      let currentGesture = '';
-      let currentHandType = '';
+      hands.onResults((results) => {
+        canvasCtx.clearRect(0, 0, emotionCanvas.width, emotionCanvas.height);
 
-      // Function to start/stop the webcam
+        if (results.multiHandLandmarks) {
+          results.multiHandLandmarks.forEach((handLandmarks) => {
+            gestureMessage.innerText = handLandmarks[0].y > 0.5 ? "Volume Up" : "Volume Down";
+            Hands.drawLandmarks(canvasCtx, handLandmarks, Hands.BOX_CONNECTIONS);
+          });
+        } else {
+          gestureMessage.innerText = "No gestures detected";
+        }
+      });
+
       function toggleVideo() {
         if (isVideoOn) {
-          if (mediaStream) {
-            const tracks = mediaStream.getTracks();
-            tracks.forEach(track => track.stop());
-          }
+          mediaStream?.getTracks().forEach(track => track.stop());
           webcam.srcObject = null;
           gestureMessage.innerText = "Camera is off";
+          isVideoOn = false;
+
+          // Stop MediaPipe processing
+          hands.reset();
+          clearCanvas();
         } else {
           navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
               mediaStream = stream;
               webcam.srcObject = stream;
               gestureMessage.innerText = "Camera is on";
+              isVideoOn = true;
               startGestureRecognition();
             })
             .catch(err => {
-              console.log("Error starting webcam:", err);
+              console.error("Error accessing webcam:", err);
               gestureMessage.innerText = "Error accessing webcam";
             });
         }
-        isVideoOn = !isVideoOn;
       }
 
-      // Start gesture recognition when the video is on
+// Clear the canvas when stopping video
+function clearCanvas() {
+  canvasCtx.clearRect(0, 0, emotionCanvas.width, emotionCanvas.height);
+}
       function startGestureRecognition() {
-        const videoElement = webcam;
-        const canvas = emotionCanvas;
-        const videoWidth = videoElement.videoWidth;
-        const videoHeight = videoElement.videoHeight;
+        emotionCanvas.width = webcam.videoWidth;
+        emotionCanvas.height = webcam.videoHeight;
 
-        canvas.width = videoWidth;
-        canvas.height = videoHeight;
-
-        function detectGestures() {
-          if (!videoElement.paused && !videoElement.ended) {
-            hands.send({ image: videoElement });
+        setInterval(() => {
+          if (!webcam.paused && !webcam.ended) {
+            hands.send({ image: webcam });
           }
-        }
-
-        hands.onResults(results => {
-          canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-          if (results.multiHandLandmarks) {
-            results.multiHandLandmarks.forEach(handLandmarks => {
-              const wristY = handLandmarks[0].y;
-              currentHandType = wristY > 0.5 ? "up" : "down";
-              currentGesture = currentHandType === "up" ? "Volume Up" : "Volume Down";
-
-              gestureMessage.innerText = currentGesture;
-
-              hands.drawLandmarks(canvasCtx, handLandmarks, Hands.BOX_CONNECTIONS);
-            });
-          } else {
-            gestureMessage.innerText = "No gestures detected";
-          }
-        });
-
-        setInterval(detectGestures, 100);
+        }, 100);
       }
 
-      // Toggle video when the button is clicked
       toggleVideoButton.addEventListener("click", toggleVideo);
     });
   </script>

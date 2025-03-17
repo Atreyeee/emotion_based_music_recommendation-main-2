@@ -20,8 +20,9 @@ import base64
 import numpy as np
 import cv2
 import mediapipe as mp
-import pyautogui
-import screen_brightness_control as sbc
+#import pyautogui
+#import screen_brightness_control as sbc
+import subprocess
 
 
 
@@ -328,34 +329,36 @@ def upload_image(request):
     return JsonResponse({"error": "Invalid request method"}, status=400)
 
 # Function to increase brightness
-def increase_brightness():
-    try:
-        current_brightness = sbc.get_brightness()
-        new_brightness = min(current_brightness[0] + 10, 100)  # Increase by 10%, max 100%
-        sbc.set_brightness(new_brightness)
-        print(f"Brightness increased to {new_brightness}%")
-    except Exception as e:
-        print(f"Error increasing brightness: {e}")
-
-# Function to decrease brightness
 def decrease_brightness():
     try:
-        current_brightness = sbc.get_brightness()
-        new_brightness = max(current_brightness[0] - 10, 0)  # Decrease by 10%, min 0%
-        sbc.set_brightness(new_brightness)
-        print(f"Brightness decreased to {new_brightness}%")
+        subprocess.run(["osascript", "-e", "tell application \"System Events\" to key code 145"])
+        print("Brightness decreased")
     except Exception as e:
         print(f"Error decreasing brightness: {e}")
 
+# Function to decrease brightness
+def increase_brightness():
+    try:
+        subprocess.run(["osascript", "-e", "tell application \"System Events\" to key code 144"])
+        print("Brightness increased")
+    except Exception as e:
+        print(f"Error increasing brightness: {e}")
 # Function to increase volume
 def increase_volume():
-    pyautogui.press("volumeup")  # Press volume up key
-    print("Volume Up")
+    try:
+        # Increase volume using osascript
+        subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) + 10)"])
+        print("Volume increased")
+    except Exception as e:
+        print(f"Error increasing volume: {e}")
 
-# Function to decrease volume
 def decrease_volume():
-    pyautogui.press("volumedown")  # Press volume down key
-    print("Volume Down")
+    try:
+        # Decrease volume using osascript
+        subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) - 10)"])
+        print("Volume decreased")
+    except Exception as e:
+        print(f"Error decreasing volume: {e}")
 
 # Recognize gestures in real-time
 def recognize_gesture(frame):
