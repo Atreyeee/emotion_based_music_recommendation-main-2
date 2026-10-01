@@ -1,29 +1,27 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>Login Page</title>
-  <link rel="stylesheet" href="{% static 'style.css' %}">
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet">
-</head>
-<body>
-  <div class="background">
-    <div class="shape"></div>
-    <div class="shape"></div>
+{% extends "base.html" %}
+{% block title %}Login — Emotion Radar{% endblock %}
+{% block content %}
+<div style="min-height: 72vh; display: flex; align-items: center; justify-content: center; padding: 40px 24px;">
+  <div class="hud-panel" style="width: 100%; max-width: 400px;">
+    <span class="hud-label">AUTH.LOGIN</span>
+    <h2 style="font-size: 30px; margin-bottom: 24px; text-align: center;" class="cursor">ACCESS TERMINAL</h2>
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      <div class="field-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required>
+      </div>
+      <div class="field-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Log In</button>
+    </form>
+
+    <p style="text-align: center; margin-top: 22px; color: var(--text-dim); font-size: 13.5px;">
+      No account? <a href="{% url 'signup' %}">Register here</a>
+    </p>
   </div>
-  <form method="post" action="{% url 'login' %}">
-    <h3>Login Here</h3>
-    {% csrf_token %}
-    <label for="email">Username</label>
-    <input type="text" placeholder="Enter username" id="username" name="username">
-
-    <label for="password">Password</label>
-    <input type="password" placeholder="Password" id="password" name="password">
-
-    <button type="submit">Log In</button>
-    <a href="{% url 'signup' %}">Create an account</a>
-  </form>
-</body>
-</html>
+</div>
+{% endblock %}

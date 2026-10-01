@@ -1,61 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Main Page</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f2f2f2;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            text-align: center;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            font-size: 2.5em;
-            color: #333;
-        }
-        button {
-            font-size: 1.2em;
-            margin: 20px;
-            padding: 10px 20px;
-            border: none;
-            background-color: #4CAF50;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="container">
-        <h1>Emotion Based Music recommedation</h1>
-        <p>Click a button to proceed</p>
-
-        <!-- Login Button -->
-        <a href="{% url 'login' %}">
-            <button>Login</button>
-        </a>
-        
-        <!-- Signup Button -->
-        <a href="{% url 'signup' %}">
-            <button>Signup</button>
-        </a>
+{% extends "base.html" %}
+{% block title %}Emotion Radar — Emotion-Based Music Recommendation{% endblock %}
+{% block content %}
+<div style="min-height: 78vh; display: flex; align-items: center; justify-content: center; padding: 40px 24px;">
+  <div class="hud-panel" style="max-width: 640px; text-align: center;">
+    <span class="hud-label">SYS.BOOT</span>
+    <p style="font-family: var(--font-display); color: var(--text-dim); font-size: 18px; letter-spacing: 0.1em; margin-bottom: 6px;">
+      &gt; INITIALIZING EMOTION SCANNER...
+    </p>
+    <h1 class="gradient-text cursor" style="font-size: 52px; margin-bottom: 18px;">EMOTION RADAR</h1>
+    <p style="color: var(--text-dim); font-size: 15.5px; max-width: 46ch; margin: 0 auto 32px;">
+      Point your camera at yourself. A face-detection + emotion-classification
+      pipeline reads your expression in real time and routes you straight to
+      a playlist that matches it.
+    </p>
+    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+      <a href="{% url 'signup' %}" class="btn btn-primary">Register</a>
+      <a href="{% url 'login' %}" class="btn btn-ghost">Login</a>
     </div>
-
-</body>
-</html>
+  </div>
+</div>
+{% endblock %}

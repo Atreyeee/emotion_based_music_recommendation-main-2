@@ -1,196 +1,128 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
+{% block title %}Scanner — Emotion Radar{% endblock %}
+{% block extra_head %}
+<style>
+  .scanner-wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 820px) { .scanner-wrap { grid-template-columns: 1fr; } }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emotion-Based Music Recommendation</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #121212;
-      color: #fff;
-      text-align: center;
-      padding: 20px;
-    }
+  #videoFrame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    overflow: hidden;
+    border: 1px solid var(--green-dim);
+  }
+  #webcam, #overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #overlay { pointer-events: none; }
 
-    #videoContainer {
-      margin: 20px auto;
-      width: 640px;
-      height: 480px;
-      position: relative;
-    }
+  .scanline-sweep {
+    position: absolute;
+    left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    box-shadow: 0 0 12px var(--green-glow);
+    animation: sweep 3.2s linear infinite;
+    opacity: 0.8;
+  }
+  @keyframes sweep {
+    0% { top: 0%; }
+    100% { top: 100%; }
+  }
 
-    video {
-      width: 100%;
-      height: 100%;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      background-color: black;
-    }
+  #cameraOffMessage {
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 22px; color: var(--text-dim);
+    background: #000;
+  }
 
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-    }
+  .readout-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-top: 1px solid var(--green-dim);
+    font-size: 14.5px;
+  }
+  .readout-row:first-child { border-top: none; }
+  .readout-key { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-size: 12.5px; }
+  .readout-val { font-family: var(--font-display); font-size: 20px; color: var(--green); }
 
-    .controls {
-      margin-top: 20px;
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-    }
+  .controls-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .controls-row .btn { flex: 1; min-width: 140px; }
 
-    button,
-    label {
-      padding: 10px 20px;
-      background-color: #1db954;
-      border: none;
-      border-radius: 5px;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
+  .mood-quicklinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="scanner-wrap">
 
-    button:hover,
-    label:hover {
-      background-color: #14833b;
-    }
+  <div>
+    <div id="videoFrame" class="hud-panel" style="padding: 0;">
+      <span class="hud-label" style="top: -13px;">CAM.FEED</span>
+      <video id="webcam" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div class="scanline-sweep"></div>
+      <div id="cameraOffMessage">CAMERA OFFLINE</div>
+    </div>
 
-    input[type="file"] {
-      display: none;
-    }
-
-    #gestureMessage {
-      font-size: 20px;
-      font-weight: bold;
-      margin-top: 15px;
-      color: #1db954;
-    }
-
-    #cameraOffMessage {
-      display: none;
-      justify-content: center;
-      align-items: center;
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: black;
-      color: white;
-      font-size: 24px;
-      font-weight: bold;
-      border-radius: 10px;
-      z-index: 10;
-    }
-  </style>
-</head>
-
-<body>
-  <h1>Emotion-Based Music Recommendation</h1>
-  <h2>Welcome, {{ user.username }}</h2>
-
-  <div id="videoContainer">
-    <video id="webcam" autoplay muted></video>
-    <canvas id="emotionCanvas"></canvas>
-    <div id="cameraOffMessage">Camera is off</div>
+    <div class="controls-row">
+      <button id="toggleVideo" class="btn btn-ghost" type="button">Toggle Camera</button>
+      <label for="imageUpload" class="btn btn-ghost" style="cursor: pointer;">Upload Image</label>
+      <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+    </div>
   </div>
 
-  <div class="controls">
-    <button id="toggleVideo">Video On/Off</button>
-    <label for="imageUpload">Upload Image</label>
-    <input type="file" id="imageUpload" accept="image/*" />
-    <button id="recommendedPlaylist">Recommended Playlist</button>
+  <div>
+    <div class="hud-panel">
+      <span class="hud-label">STATUS</span>
+      <div class="readout-row">
+        <span class="readout-key">Link</span>
+        <span class="readout-val" id="linkStatus">STANDBY</span>
+      </div>
+      <div class="readout-row">
+        <span class="readout-key">Face</span>
+        <span class="readout-val" id="faceStatus">—</span>
+      </div>
+      <div class="readout-row">
+        <span class="readout-key">Emotion</span>
+        <span class="readout-val" id="emotionStatus">—</span>
+      </div>
+
+      <button id="recommendedPlaylist" class="btn btn-primary" style="width: 100%; margin-top: 22px;" disabled>
+        Open Recommended Playlist
+      </button>
+
+      <p style="margin-top: 18px; font-size: 12.5px; color: var(--text-dim);">
+        Welcome, {{ username }}. Frames are analyzed roughly twice a second — nothing is stored.
+      </p>
+    </div>
+
+    <div class="mood-quicklinks">
+      {% for key, entry in moods.items %}
+      <a href="{% url 'playlist' key %}" class="badge mood-{{ key }}">{{ entry.label }}</a>
+      {% endfor %}
+    </div>
   </div>
 
-  <p id="gestureMessage"></p>
-
-  <!-- Load MediaPipe before main.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
-  <script src="{% static 'main.js' %}"></script>
-
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const webcam = document.getElementById("webcam");
-      const gestureMessage = document.getElementById("gestureMessage");
-      const toggleVideoButton = document.getElementById("toggleVideo");
-      const emotionCanvas = document.getElementById("emotionCanvas");
-      const canvasCtx = emotionCanvas.getContext("2d");
-
-      let isVideoOn = false;
-      let mediaStream = null;
-
-      const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-      hands.setOptions({
-        maxNumHands: 2,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      hands.onResults((results) => {
-        canvasCtx.clearRect(0, 0, emotionCanvas.width, emotionCanvas.height);
-
-        if (results.multiHandLandmarks) {
-          results.multiHandLandmarks.forEach((handLandmarks) => {
-            gestureMessage.innerText = handLandmarks[0].y > 0.5 ? "Volume Up" : "Volume Down";
-            Hands.drawLandmarks(canvasCtx, handLandmarks, Hands.BOX_CONNECTIONS);
-          });
-        } else {
-          gestureMessage.innerText = "No gestures detected";
-        }
-      });
-
-      function toggleVideo() {
-        if (isVideoOn) {
-          mediaStream?.getTracks().forEach(track => track.stop());
-          webcam.srcObject = null;
-          gestureMessage.innerText = "Camera is off";
-          isVideoOn = false;
-
-          // Stop MediaPipe processing
-          hands.reset();
-          clearCanvas();
-        } else {
-          navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-              mediaStream = stream;
-              webcam.srcObject = stream;
-              gestureMessage.innerText = "Camera is on";
-              isVideoOn = true;
-              startGestureRecognition();
-            })
-            .catch(err => {
-              console.error("Error accessing webcam:", err);
-              gestureMessage.innerText = "Error accessing webcam";
-            });
-        }
-      }
-
-// Clear the canvas when stopping video
-function clearCanvas() {
-  canvasCtx.clearRect(0, 0, emotionCanvas.width, emotionCanvas.height);
-}
-      function startGestureRecognition() {
-        emotionCanvas.width = webcam.videoWidth;
-        emotionCanvas.height = webcam.videoHeight;
-
-        setInterval(() => {
-          if (!webcam.paused && !webcam.ended) {
-            hands.send({ image: webcam });
-          }
-        }, 100);
-      }
-
-      toggleVideoButton.addEventListener("click", toggleVideo);
-    });
-  </script>
-</body>
-
-</html>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  window.DETECT_EMOTION_URL = "{% url 'detect-emotion' %}";
+  window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+<script src="{% static 'js/main.js' %}"></script>
+{% endblock %}
