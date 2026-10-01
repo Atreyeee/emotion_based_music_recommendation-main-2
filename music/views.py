@@ -159,7 +159,7 @@ def process_frame(frame):
                 analysis = DeepFace.analyze(face_roi, actions=["emotion"], enforce_detection=False)
                 detected_emotion = analysis[0]["dominant_emotion"]
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Emotion analysis failed: %s", exc)
+                logger.warning("Emotion analysis failed")
 
     return frame, detected_emotion, face_box
 
