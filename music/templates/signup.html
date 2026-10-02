@@ -1,31 +1,35 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Signup Page</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'style2.css' %}">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-</head>
-<body>
-    <div class="background">
-        <div class="shape"></div>
-        <div class="shape"></div>
-    </div>
-    <form action="" method="POST">
-        {% csrf_token %}
-        <h3>Signup Here</h3>
-        <label for="username">Enter Your UserName</label>
-        <input type="text" placeholder="Username" name="username" id="username">
+{% extends "base.html" %}
+{% block title %}Register — Emotion Radar{% endblock %}
+{% block content %}
+<div style="min-height: 72vh; display: flex; align-items: center; justify-content: center; padding: 40px 24px;">
+  <div class="hud-panel" style="width: 100%; max-width: 420px;">
+    <span class="hud-label">AUTH.REGISTER</span>
+    <h2 style="font-size: 30px; margin-bottom: 24px; text-align: center;" class="cursor">CREATE PROFILE</h2>
+
+    <form method="post" action="{% url 'signup' %}">
+      {% csrf_token %}
+      <div class="field-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" minlength="3" autocomplete="username" required>
+      </div>
+      <div class="field-group">
         <label for="email">Email</label>
-        <input type="email" placeholder="Email or Phone" name="email" id="email">
-        <label for="password1">Password</label>
-        <input type="password" placeholder="Password" id="password1" name="password1">
+        <input type="email" id="email" name="email" autocomplete="email" required>
+      </div>
+      <div class="field-group">
+        <label for="password1">Password (min 8 chars)</label>
+        <input type="password" id="password1" name="password1" minlength="8" autocomplete="new-password" required>
+      </div>
+      <div class="field-group">
         <label for="password2">Confirm Password</label>
-        <input type="password" placeholder="Confirm Password" id="password2" name="password2">
-        <button type="submit">Signup</button>
-        <a href="{% url 'login' %}">I already have an account</a>
+        <input type="password" id="password2" name="password2" minlength="8" autocomplete="new-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Register</button>
     </form>
-</body>
-</html>
+
+    <p style="text-align: center; margin-top: 22px; color: var(--text-dim); font-size: 13.5px;">
+      Already registered? <a href="{% url 'login' %}">Log in here</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

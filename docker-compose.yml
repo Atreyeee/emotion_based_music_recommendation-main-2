@@ -1,0 +1,18 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DJANGO_DEBUG: "False"
+    ports:
+      - "8000:8000"
+    volumes:
+      - media:/app/media
+      - db:/app/db
+
+volumes:
+  media:
+  db:

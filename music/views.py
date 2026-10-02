@@ -1,396 +1,216 @@
-from django.shortcuts import render, redirect
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from requests import post
-from django.contrib import messages
-from django.contrib.auth.models import User, auth
-from django.http import StreamingHttpResponse
-from django.contrib.auth import authenticate, login as auth_login
-from django.contrib.auth.decorators import login_required
-# from .open_cv import detect_emotion
-from .models import *
-from .serializer import *
-import cv2
-from django.views.decorators.csrf import csrf_exempt
-import json
-from django.http import JsonResponse
-import mediapipe as mp
-from deepface import DeepFace
 import base64
-import numpy as np
+import json
+import logging
+
 import cv2
 import mediapipe as mp
-#import pyautogui
-#import screen_brightness_control as sbc
-import subprocess
+import numpy as np
+from deepface import DeepFace
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .models import angry, fear, happy, neutral, sad, surprise
+from .serializer import (
+    AngrySongSerializer,
+    FearSongSerializer,
+    HappySongSerializer,
+    NeutralSongSerializer,
+    SadSongSerializer,
+    SurpriseSongSerializer,
+)
 
+logger = logging.getLogger(__name__)
 
-# Initialize MediaPipe Face Detection
-mp_face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.3)
+# Single source of truth mapping a mood name to its model/serializer/template.
+# Every mood-specific view and URL used to be copy-pasted six times (and the
+# six API endpoints even collided on the same URL, permanently hiding five
+# of them) — this dict is what replaces all of that duplication.
+MOOD_REGISTRY = {
+    "neutral": {"model": neutral, "serializer": NeutralSongSerializer, "label": "Neutral"},
+    "happy": {"model": happy, "serializer": HappySongSerializer, "label": "Happy"},
+    "sad": {"model": sad, "serializer": SadSongSerializer, "label": "Sad"},
+    "fear": {"model": fear, "serializer": FearSongSerializer, "label": "Fear"},
+    "surprise": {"model": surprise, "serializer": SurpriseSongSerializer, "label": "Surprise"},
+    "angry": {"model": angry, "serializer": AngrySongSerializer, "label": "Angry"},
+}
 
+mp_face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.5)
 
-# Initialize MediaPipe Hands
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
-hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5,min_tracking_confidence=0.5 )
-
-
-
-def neutral_playlist(request):
-    neutral_songs=neutral.objects.all()
-    return render(request,'neutral_playlist.html',{'neutral_playlist':neutral_songs})
-
-class NeutralSongListView(APIView):
-    def get(self, request):
-        songs = neutral.objects.all()  # Fetch all songs from the database
-        serializer = NeutralSongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
-    
-def happy_playlist(request):
-    happy_songs=happy.objects.all()
-    return render(request,'happy_playlist.html',{'happy_playlist':happy_songs})
-
-class HappySongListView(APIView):
-    def get(self, request):
-        songs = happy.objects.all()  # Fetch all songs from the database
-        serializer = HappySongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
-    
-def fear_playlist(request):
-    fear_songs=fear.objects.all()
-    return render(request,'fear_playlist.html',{'fear_playlist':fear_songs})
-
-class FearSongListView(APIView):
-    def get(self, request):
-        songs = fear.objects.all()  # Fetch all songs from the database
-        serializer = FearSongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
-
-def sad_playlist(request):
-    sad_songs=sad.objects.all()
-    return render(request,'sad_playlist.html',{'sad_playlist':sad_songs})
-
-class SadSongListView(APIView):
-    def get(self, request):
-        songs = sad.objects.all()  # Fetch all songs from the database
-        serializer = SadSongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
-    
-def angry_playlist(request):
-    angry_songs=angry.objects.all()
-    return render(request,'angry_playlist.html',{'angry_playlist':angry_songs})
-
-class AngrySongListView(APIView):
-    def get(self, request):
-        songs = angry.objects.all()  # Fetch all songs from the database
-        serializer = AngrySongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
-    
-def surprise_playlist(request):
-    surprise_songs=surprise.objects.all()
-    return render(request,'surprise_playlist.html',{'surprise_playlist':surprise_songs})
-
-class SurpriseSongListView(APIView):
-    def get(self, request):
-        songs = surprise.objects.all()  # Fetch all songs from the database
-        serializer = SurpriseSongSerializer(songs, many=True)  # Serialize the list of songs
-        return Response(serializer.data)
 
 def index(request):
-    return render(request,'index.html')
+    if request.user.is_authenticated:
+        return redirect("webcam")
+    return render(request, "index.html")
+
 
 def login(request):
-    if request.method == 'POST':  # Check if the request is POST
-        username = request.POST['username']
-        password = request.POST['password']
-    
-        user_auth = auth.authenticate(username=username, password=password)
-        
-        if user_auth is not None:  # Check if authentication is successful
-            print(f"User authenticated: {request.user.is_authenticated}")
-            # Log the user in
-            auth_login(request, user_auth)  # Using the renamed login function
-            return redirect('webcam')  # Redirect to webcam page if authenticated
-        else:
-            messages.info(request, 'Invalid credentials')  # Invalid login attempt
-            return redirect('login')  # Redirect to login page if authentication fails
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "")
 
-    else:
-        return render(request, 'login.html')  # Render the ligin page if request is GET
-    
+        user_auth = authenticate(request, username=username, password=password)
+        if user_auth is not None:
+            auth_login(request, user_auth)
+            return redirect("webcam")
+
+        messages.error(request, "Invalid username or password.")
+        return redirect("login")
+
+    return render(request, "login.html")
+
+
 def signup(request):
-     if request.method == 'POST':  # Check if the request is POST
-        email = request.POST['email']
-        username = request.POST['username']
-        password = request.POST['password1']
-        password2 = request.POST['password2']
+    if request.method == "POST":
+        email = request.POST.get("email", "").strip()
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password1", "")
+        password2 = request.POST.get("password2", "")
 
-        if password == password2:  # Check if passwords match
-            if User.objects.filter(email=email).exists():  # Check if email is already registered
-                messages.info(request, 'Email is already registered')
-                return redirect('login')
-            elif User.objects.filter(username=username).exists():
-                messages.info(request, 'Username taken ')
-                return redirect('login')
-            else:
-                user = User.objects.create_user(
-                    username=username, 
-                    email=email, 
-                    password=password
-                )
-                user.save()
+        if len(username) < 3:
+            messages.error(request, "Username must be at least 3 characters.")
+            return redirect("signup")
+        if len(password) < 8:
+            messages.error(request, "Password must be at least 8 characters.")
+            return redirect("signup")
+        if password != password2:
+            messages.error(request, "Passwords do not match.")
+            return redirect("signup")
+        if User.objects.filter(email=email).exists():
+            messages.error(request, "Email is already registered.")
+            return redirect("signup")
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "That username is taken.")
+            return redirect("signup")
 
-                # Log the user in after sign-up
-                user_login = auth.authenticate(username=username, password=password)
-                if user_login is not None:
-                    auth.login(request, user_login)
-                    return redirect('webcam')  # Redirect to the home or webcam page
-                else:
-                    messages.info(request, 'Error logging in after sign-up')
-                    return redirect('login')
+        user = User.objects.create_user(username=username, email=email, password=password)
+        user_login = authenticate(request, username=username, password=password)
+        if user_login is not None:
+            auth_login(request, user_login)
+            return redirect("webcam")
 
-        else:
-            messages.info(request, 'Passwords do not match')
-            return redirect('signup')
-     else: 
-        return render(request, 'signup.html')
-    
-@login_required(login_url='login')
-def webcam_page(request):
-    # Pass the logged-in user's first name to the template
-    username = request.user.username
-    return render(request, 'web_cam.html', {'username': username})
+        messages.info(request, "Account created — please log in.")
+        return redirect("login")
 
+    return render(request, "signup.html")
+
+
+@login_required(login_url="login")
 def logout(request):
-    pass
+    auth_logout(request)
+    messages.info(request, "You have been logged out.")
+    return redirect("login")
 
-def video_stream(request):
-    return StreamingHttpResponse(generate(), content_type="multipart/x-mixed-replace; boundary=frame")
 
-# Generate Frames with Emotion Detection
-def generate():
-    try:
-        # Initialize the webcam
-        cam = cv2.VideoCapture(0)
-        while True:
-            ret, frame = cam.read()
-            if not ret:
-                break
+@login_required(login_url="login")
+def webcam_page(request):
+    return render(request, "web_cam.html", {"username": request.user.username, "moods": MOOD_REGISTRY})
 
-            # Detect emotion and draw on the frame
-            try:
-                frame, emotion,face_box = process_frame(frame)
-            except Exception as e:
-                print(f"Error during emotion detection: {e}")
-                cv2.putText(frame, "Error detecting emotion", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            # Detect and draw hand gestures
-            try:
-                frame = recognize_gesture(frame)  # Hand gesture recognition
-            except Exception as e:
-                print(f"Error detecting gestures: {e}")
-            # Encode the frame as JPEG
-            _, jpeg = cv2.imencode('.jpg', frame)
-            frame = jpeg.tobytes()
 
-            # Yield the frame
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+@login_required(login_url="login")
+def playlist(request, mood):
+    entry = MOOD_REGISTRY.get(mood)
+    if entry is None:
+        messages.error(request, "Unknown mood.")
+        return redirect("webcam")
 
-    except Exception as e:
-        print(f"Error in generate(): {e}")
-    finally:
-        cam.release()
+    songs = entry["model"].objects.all()
+    return render(
+        request,
+        "playlist.html",
+        {"songs": songs, "mood": mood, "mood_label": entry["label"], "moods": MOOD_REGISTRY},
+    )
 
-# Process Frame for Emotion Detection
+
 def process_frame(frame):
-    # Convert to RGB for MediaPipe processing
+    """Detects the primary face in a frame and classifies its emotion.
+    Returns (frame, emotion_label, face_box_dict_or_None).
+    """
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    # Run MediaPipe Face Detection
     results = mp_face_detection.process(rgb_frame)
 
-    detected_emotion = "neutral"  # Default emotion
-    face_box = None  # Default face box
+    detected_emotion = None
+    face_box = None
 
     if results.detections:
-        for detection in results.detections:
-            # Get bounding box coordinates
-            bboxC = detection.location_data.relative_bounding_box
-            h, w, _ = frame.shape
-            x, y, width, height = (
-                int(bboxC.xmin * w),
-                int(bboxC.ymin * h),
-                int(bboxC.width * w),
-                int(bboxC.height * h),
-            )
+        # Use the highest-confidence detection rather than looping over
+        # every face found — keeps results meaningful when bystanders are
+        # in frame, and matches how a single-user webcam flow should behave.
+        best = max(results.detections, key=lambda d: d.score[0])
+        bboxC = best.location_data.relative_bounding_box
+        h, w, _ = frame.shape
+        x = max(0, int(bboxC.xmin * w))
+        y = max(0, int(bboxC.ymin * h))
+        width = min(w - x, int(bboxC.width * w))
+        height = min(h - y, int(bboxC.height * h))
+        face_box = {"x": x, "y": y, "width": width, "height": height}
 
-            # Draw a green bounding box around the face
-            cv2.rectangle(rgb_frame, (x, y), (x + width, y + height), (0, 255, 0), 2)
-
-            # Save face box coordinates to return
-            face_box = {"x": x, "y": y, "width": width, "height": height}
-
-            # Extract the region of interest (ROI) for emotion detection
-            face_roi = rgb_frame[y:y + height, x:x + width]
-
-            # Use DeepFace to detect emotion
+        face_roi = frame[y : y + height, x : x + width]
+        if face_roi.size > 0:
             try:
-                analysis = DeepFace.analyze(face_roi, actions=['emotion'], enforce_detection=False)
-                detected_emotion = analysis[0]['dominant_emotion']  # Get the dominant emotion
-                print(f"Detected Emotion: {detected_emotion}")
-            except Exception as e:
-                print(f"Error in emotion detection: {e}")
+                analysis = DeepFace.analyze(face_roi, actions=["emotion"], enforce_detection=False)
+                detected_emotion = analysis[0]["dominant_emotion"]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Emotion analysis failed")
 
-            # Define coordinates for the label box
-            label_width = max(100, width // 3)  # Adjust the width of the label box
-            label_x2 = x + label_width
-            label_y2 = max(0, y - 10)  # Ensure it doesn't go out of bounds
-
-            # Draw the white box for the label
-            cv2.rectangle(rgb_frame, (x, label_y2 - 30), (label_x2, label_y2), (255, 255, 255), -1)
-
-            # Overlay the emotion label text inside the white box
-            cv2.putText(
-                rgb_frame,
-                detected_emotion.capitalize(),  # Capitalize the emotion label
-                (x + 5, label_y2 - 10),  # Adjust text position for visibility
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,  # Font size
-                (0, 0, 0),  # Text color (black)
-                2,  # Thickness
-            )
+    return frame, detected_emotion, face_box
 
 
-    return frame, detected_emotion, face_box # Return both emotion and face_box
-
- 
-# Emotion Detection API
 @csrf_exempt
+@require_POST
 def detect_emotion(request):
-    if request.method == "POST":
-        try:
-            # Parse and decode the frame data
-            data = json.loads(request.body.decode("utf-8"))
-            frame_data = data.get("frame")
-            if not frame_data:
-                return JsonResponse({"error": "No frame data provided"}, status=400)
-
-            # Decode base64 image data
-            encoded_data = frame_data.split(",")[1] if frame_data.startswith('data:image') else frame_data
-            decoded_data = base64.b64decode(encoded_data)
-            np_data = np.frombuffer(decoded_data, np.uint8)
-            frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-
-            if frame is None:
-                return JsonResponse({"error": "Failed to decode frame"}, status=400)
-
-            # Process the frame for emotion detection
-            frame, detected_emotion, face_box = process_frame(frame)
-            frame = recognize_gesture(frame)
-
-            # Include the emotion and face box in the response
-            return JsonResponse({"emotion": detected_emotion, "face_box": face_box})
-
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-    return JsonResponse({"error": "Invalid request method"}, status=400)
-
-
-# Image Upload API
-@csrf_exempt
-def upload_image(request):
-    if request.method == "POST":
-        try:
-            # Get the uploaded image
-            uploaded_file = request.FILES.get("image")
-            if not uploaded_file:
-                return JsonResponse({"error": "No image provided"}, status=400)
-
-            # Read the uploaded image
-            file_bytes = uploaded_file.read()
-            np_data = np.frombuffer(file_bytes, np.uint8)
-            frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-
-            if frame is None:
-                return JsonResponse({"error": "Failed to decode image"}, status=400)
-
-            # Process the frame for emotion detection
-            _, detected_emotion = process_frame(frame)
-
-            return JsonResponse({"emotion": detected_emotion})
-
-        except Exception as e:
-            print(f"Error processing uploaded image: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-    return JsonResponse({"error": "Invalid request method"}, status=400)
-
-# Function to increase brightness
-def decrease_brightness():
+    """Accepts a single base64-encoded frame (from the browser's webcam or
+    an uploaded image) and returns the detected emotion and face box.
+    """
     try:
-        subprocess.run(["osascript", "-e", "tell application \"System Events\" to key code 145"])
-        print("Brightness decreased")
-    except Exception as e:
-        print(f"Error decreasing brightness: {e}")
+        data = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-# Function to decrease brightness
-def increase_brightness():
+    frame_data = data.get("frame")
+    if not frame_data:
+        return JsonResponse({"error": "No frame data provided"}, status=400)
+
     try:
-        subprocess.run(["osascript", "-e", "tell application \"System Events\" to key code 144"])
-        print("Brightness increased")
-    except Exception as e:
-        print(f"Error increasing brightness: {e}")
-# Function to increase volume
-def increase_volume():
-    try:
-        # Increase volume using osascript
-        subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) + 10)"])
-        print("Volume increased")
-    except Exception as e:
-        print(f"Error increasing volume: {e}")
+        encoded = frame_data.split(",")[1] if frame_data.startswith("data:image") else frame_data
+        decoded = base64.b64decode(encoded)
+        np_data = np.frombuffer(decoded, np.uint8)
+        frame = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+    except Exception:
+        return JsonResponse({"error": "Failed to decode frame"}, status=400)
 
-def decrease_volume():
-    try:
-        # Decrease volume using osascript
-        subprocess.run(["osascript", "-e", "set volume output volume (output volume of (get volume settings) - 10)"])
-        print("Volume decreased")
-    except Exception as e:
-        print(f"Error decreasing volume: {e}")
+    if frame is None:
+        return JsonResponse({"error": "Failed to decode frame"}, status=400)
 
-# Recognize gestures in real-time
-def recognize_gesture(frame):
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    _, detected_emotion, face_box = process_frame(frame)
 
-    # Hand gesture detection
-    hand_results = hands.process(rgb_frame)
-    if hand_results.multi_hand_landmarks:
-        for hand_landmarks, handedness in zip(hand_results.multi_hand_landmarks, hand_results.multi_handedness):
-            hand_type = handedness.classification[0].label
-            wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
+    playlist_url = None
+    if detected_emotion and detected_emotion in settings.MOOD_PLAYLIST_MAP:
+        from django.urls import reverse
 
-            if wrist_y > 0.5:  # Hand is up
-                if hand_type == "Left":
-                    increase_volume()  # Left hand up: Volume Up
-                elif hand_type == "Right":
-                    increase_brightness()  # Right hand up: Brightness Up
-            else:  # Hand is down
-                if hand_type == "Left":
-                    decrease_volume()  # Left hand down: Volume Down
-                elif hand_type == "Right":
-                    decrease_brightness()  # Right hand down: Brightness Down
+        playlist_url = reverse("playlist", args=[settings.MOOD_PLAYLIST_MAP[detected_emotion]])
 
-            # Draw landmarks on the frame
-            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-            # Optionally, draw each hand landmark as a small circle (you can customize this part)
-            for landmark in hand_landmarks.landmark:
-                # Convert normalized coordinates to pixel values
-                h, w, _ = frame.shape
-                cx, cy = int(landmark.x * w), int(landmark.y * h)
-                cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)  # Draw green circle on each landmark
-
-    return frame
+    return JsonResponse({"emotion": detected_emotion, "face_box": face_box, "playlist_url": playlist_url})
 
 
+class MoodSongListView(APIView):
+    """Single parametrized API view replacing the six mood-specific
+    APIViews that previously all fought over the same `/api/songs/` URL.
+    """
+
+    def get(self, request, mood):
+        entry = MOOD_REGISTRY.get(mood)
+        if entry is None:
+            return Response({"error": f"Unknown mood '{mood}'"}, status=404)
+
+        songs = entry["model"].objects.all()
+        serializer = entry["serializer"](songs, many=True, context={"request": request})
+        return Response(serializer.data)
